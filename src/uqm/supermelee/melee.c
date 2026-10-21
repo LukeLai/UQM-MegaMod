@@ -579,7 +579,8 @@ DrawVerticalText (UNICODE *str, POINT point)
 			AlignText ((const UNICODE *)AddPadd (
 					(const UNICODE *)str, &leading), &t.baseline.x));
 
-	str_len = strlen (buf);
+	// One character per row: count characters, not UTF-8 bytes
+	str_len = utf8StringCount (buf);
 
 	t.align = ALIGN_CENTER;
 	t.CharCount = 1;
