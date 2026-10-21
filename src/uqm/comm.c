@@ -438,8 +438,11 @@ ReleaseTalkingAnim (void)
 // doesn't fit in one line, or if an entire line fits, to the character
 // past the newline, or if the entire string fits, to the end of the
 // string.
-// maxWidth is the maximum number of pixels that a line may be wide
-//   ASSUMPTION: there are no words in the text wider than maxWidth
+// Words are separated by spaces. CJK text has no spaces, so there a
+// line may also be broken between two characters, except where
+// UniChar_canBreakBetween() forbids it (kinsoku shori).
+// maxWidth is the maximum number of pixels that a line may be wide.
+// A word wider than maxWidth is broken at the last character that fits.
 // maxChars is the maximum number of characters (not bytes) that are to
 // be fitted.
 // TRUE is returned if a complete line fitted
@@ -452,24 +455,29 @@ getLineWithinWidth(TEXT *pText, const char **startNext,
 			// The end of the line of text has been reached.
 	BOOLEAN done;
 			// We cannot add any more words.
+	BOOLEAN spaceFollows;
+			// The word that was just scanned is followed by a space.
 	RECT rect;
 	COUNT oldCount;
+			// The number of characters up to the end of the last word
+			// that fitted.
 	const char *ptr;
 	const char *wordStart;
+	const char *chStart;
 	UniChar ch;
+	UniChar prevCh;
 	COUNT charCount;
-
-	//GetContextClipRect (&rect);
 
 	eol = FALSE;
 	done = FALSE;
-	oldCount = 1;
+	oldCount = 0;
 	charCount = 0;
-	ch = '\0';
+	prevCh = '\0';
 	ptr = pText->pStr;
 	for (;;)
 	{
 		wordStart = ptr;
+		spaceFollows = FALSE;
 
 		// Scan one word.
 		for (;;)
@@ -480,20 +488,49 @@ getLineWithinWidth(TEXT *pText, const char **startNext,
 				done = TRUE;
 				break;
 			}
+			chStart = ptr;
 			ch = getCharFromString (&ptr);
 			eol = ch == '\0' || ch == '\n' || ch == '\r';
 			done = eol || charCount >= maxChars;
-			if (done || ch == ' ')
+			if (done)
 				break;
+			if (ch == ' ')
+			{
+				spaceFollows = TRUE;
+				break;
+			}
+			if (chStart != wordStart && UniChar_canBreakBetween (prevCh, ch))
+			{	// CJK text; end the word here without consuming 'ch'.
+				ptr = chStart;
+				break;
+			}
 			charCount++;
+			prevCh = ch;
 		}
 
-		oldCount = pText->CharCount;
 		pText->CharCount = charCount;
 		TextRect (pText, &rect, NULL);
-		
+
 		if (rect.extent.width >= maxWidth)
 		{
+			if (wordStart == pText->pStr)
+			{	// Even the first word does not fit. Break it at the
+				// last character that does, but take at least one
+				// character so that the caller makes progress.
+				COUNT fitCount = 1;
+				while (fitCount < charCount)
+				{
+					pText->CharCount = fitCount + 1;
+					TextRect (pText, &rect, NULL);
+					if (rect.extent.width >= maxWidth)
+						break;
+					fitCount++;
+				}
+				pText->CharCount = fitCount;
+				*startNext = skipUTF8Chars (pText->pStr, fitCount);
+				return FALSE;
+			}
+
 			pText->CharCount = oldCount;
 			*startNext = wordStart;
 			return FALSE;
@@ -504,8 +541,14 @@ getLineWithinWidth(TEXT *pText, const char **startNext,
 			*startNext = ptr;
 			return eol;
 		}
-		charCount++;
-				// For the space in between words.
+
+		oldCount = charCount;
+		if (spaceFollows)
+		{
+			charCount++;
+					// For the space in between words.
+			prevCh = ' ';
+		}
 	}
 }
 

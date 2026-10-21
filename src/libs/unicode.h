@@ -65,6 +65,8 @@ int UniChar_isGraph(UniChar ch);
 int UniChar_isPrint(UniChar ch);
 UniChar UniChar_toUpper(UniChar ch);
 UniChar UniChar_toLower(UniChar ch);
+int UniChar_isCJK(UniChar ch);
+int UniChar_canBreakBetween(UniChar before, UniChar after);
 
 UNICODE *AlignText (const UNICODE *str, sint16 *loc_x);
 UNICODE *AddPadd (const UNICODE *str, sint16 *padding);
