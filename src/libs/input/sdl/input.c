@@ -24,6 +24,7 @@
 #include "libs/threadlib.h"
 #include "libs/input/sdl/vcontrol.h"
 #include "libs/input/sdl/keynames.h"
+#include "libs/input/sdl/ime.h"
 #include "libs/memlib.h"
 #include "libs/file.h"
 #include "libs/log.h"
@@ -447,6 +448,9 @@ TFB_InitInput (int driver, int flags)
 
 	initKeyConfig ();
 
+	// SDL turns text input (and with it the IME) on at start-up.
+	TFB_DisableIME ();
+
 	VControl_ResetInput ();
 	InputInitialized = TRUE;
 
@@ -592,6 +596,7 @@ ProcessInputEvent (const SDL_Event *Event)
 	{
 		set_character_mode = TRUE;
 		SDL_StartTextInput ();
+		TFB_DisableIME ();
 	}
 
 	if (!in_character_mode && set_character_mode)

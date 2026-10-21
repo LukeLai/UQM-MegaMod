@@ -350,6 +350,7 @@ editbin /REBASE:BASE=0x400000 /DYNAMICBASE:NO "$(LocalDebuggerWorkingDirectory)$
     <ClCompile Include="..\..\src\libs\imgui\imgui_impl_sdlrenderer2.cpp" />
     <ClCompile Include="..\..\src\libs\imgui\imgui_tables.cpp" />
     <ClCompile Include="..\..\src\libs\imgui\imgui_widgets.cpp" />
+    <ClCompile Include="..\..\src\libs\input\sdl\ime.c" />
     <ClCompile Include="..\..\src\libs\input\sdl\input.c" />
     <ClCompile Include="..\..\src\libs\input\sdl\keynames.c" />
     <ClCompile Include="..\..\src\libs\input\sdl\vcontrol.c" />

@@ -25,6 +25,7 @@
 #include "libs/graphics/dcqueue.h"
 #include "libs/graphics/cmap.h"
 #include "libs/input/sdl/input.h"
+#include "libs/input/sdl/ime.h"
 		// for ProcessInputEvent()
 #include "libs/graphics/bbox.h"
 #include "port.h"
@@ -134,6 +135,12 @@ TFB_ProcessEvents ()
 
 	while (SDL_PollEvent (&Event) > 0)
 	{
+		if (Event.type == SDL_WINDOWEVENT
+				&& Event.window.event == SDL_WINDOWEVENT_FOCUS_GAINED)
+		{	// SDL attaches the IME again when the window gets focus
+			TFB_DisableIME ();
+		}
+
 		if (menu_visible)
 		{
 			if (UQM_ImGui_ProcessEvent (&Event))

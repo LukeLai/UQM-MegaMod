@@ -16,6 +16,7 @@
  */
 
 #include "uqm_imgui.h"
+#include "libs/input/sdl/ime.h"
 
 bool menu_visible = false;
 static bool imgui_initialized = false;
@@ -36,7 +37,10 @@ static void ShowFullScreenMenu (TabState *state)
 	ImGui_SetNextWindowSize (DISPLAY_SIZE, 0);
 
 	if (io->WantTextInput && !SDL_IsTextInputActive ())
+	{
 		SDL_StartTextInput ();
+		TFB_DisableIME ();
+	}
 	else if (!io->WantTextInput && SDL_IsTextInputActive ())
 		SDL_StopTextInput ();
 

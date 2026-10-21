@@ -483,6 +483,9 @@
     <ClCompile Include="..\..\src\libs\heap\heap.c">
       <Filter>Source Files\libs\heap</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\libs\input\sdl\ime.c">
+      <Filter>Source Files\libs\input\sdl No. 1</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\src\libs\input\sdl\input.c">
       <Filter>Source Files\libs\input\sdl No. 1</Filter>
     </ClCompile>
