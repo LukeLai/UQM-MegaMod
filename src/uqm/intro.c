@@ -35,6 +35,8 @@
 #include "libs/inplib.h"
 #include "util.h"
 #include "build.h"
+#include "comm.h"
+		// for getLineWithinWidth()
 
 #include <ctype.h>
 
@@ -147,19 +149,38 @@ DrawTextEffect (TEXT *pText, Color Fore, Color Back, int Effect)
 }
 
 static COUNT
-ParseTextLines (TEXT *Lines, COUNT MaxLines, char* Buffer)
+ParseTextLines (TEXT *Lines, COUNT MaxLines, char* Buffer, SIZE MaxWidth)
 {
 	COUNT i;
 	const char* pEnd = Buffer + strlen (Buffer);
 
-	for (i = 0; i < MaxLines && Buffer < pEnd; ++i, ++Lines)
+	for (i = 0; i < MaxLines && Buffer < pEnd; )
 	{
+		const char *pLine;
+		const char *pNext;
+		BOOLEAN eol;
 		char* pTerm = strchr (Buffer, '\n');
 		if (!pTerm)
 			pTerm = Buffer + strlen (Buffer);
 		*pTerm = '\0'; /* terminate string */
-		Lines->pStr = Buffer;
-		Lines->CharCount = ~0;
+
+		// Lines wider than the screen (translations often are) are
+		// wrapped with the current font.
+		pLine = Buffer;
+		do
+		{
+			Lines[i].pStr = pLine;
+			Lines[i].CharCount = (COUNT)~0;
+			if (*pLine == '\0')
+				break;
+			eol = getLineWithinWidth (&Lines[i], &pNext, MaxWidth,
+					(COUNT)~0);
+			pLine = pNext;
+			++i;
+		} while (!eol && *pLine != '\0' && i < MaxLines);
+		if (*Buffer == '\0')
+			++i; /* keep empty lines */
+
 		Buffer = pTerm + 1;
 	}
 	return i;
@@ -1115,7 +1136,8 @@ DoPresentation (void *pIS)
 			
 			utf8StringCopy (pPIS->Buffer, sizeof (pPIS->Buffer), pStr);
 			pPIS->LinesCount = ParseTextLines (pPIS->TextLines,
-					MAX_TEXT_LINES, pPIS->Buffer);
+					MAX_TEXT_LINES, pPIS->Buffer,
+					pPIS->clip_r.extent.width - RES_SCALE (16));
 			
 			Present_UnbatchGraphics (pPIS, TRUE);
 
