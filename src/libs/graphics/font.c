@@ -298,6 +298,30 @@ GetContextFontDispHeight (SIZE *pheight)
 	return (FALSE);
 }
 
+// The size of the largest character the context font can draw,
+// including the characters of its fallback font.
+BOOLEAN
+GetContextFontMaxCharSize (SIZE *pwidth, SIZE *pheight)
+{
+	if (_CurFontPtr == 0)
+	{
+		*pwidth = 0;
+		*pheight = 0;
+		return (FALSE);
+	}
+
+	*pwidth = (SIZE)_CurFontPtr->disp.width;
+	*pheight = (SIZE)_CurFontPtr->disp.height;
+	if (_CurFontPtr->Fallback != NULL)
+	{
+		if (_CurFontPtr->Fallback->disp.width > *pwidth)
+			*pwidth = (SIZE)_CurFontPtr->Fallback->disp.width;
+		if (_CurFontPtr->Fallback->disp.height > *pheight)
+			*pheight = (SIZE)_CurFontPtr->Fallback->disp.height;
+	}
+	return (TRUE);
+}
+
 BOOLEAN
 GetContextFontDispWidth (SIZE *pwidth)
 {
@@ -910,7 +934,7 @@ _text_blt_alt (RECT *pClipRect, TEXT *TextPtr, POINT ctxOrigin, BYTE swap,
 }
 
 static inline TFB_Char *
-getCharFrame (FONT_DESC *fontPtr, UniChar ch)
+getOwnCharFrame (FONT_DESC *fontPtr, UniChar ch)
 {
 	UniChar pageStart = ch & CHARACTER_PAGE_MASK;
 	size_t charIndex;
@@ -938,5 +962,17 @@ getCharFrame (FONT_DESC *fontPtr, UniChar ch)
 		//log_add (log_Debug, "Character %u not present", (unsigned int) ch);
 		return NULL;
 	}
+}
+
+// Characters missing from a font are looked up in its fallback font.
+static inline TFB_Char *
+getCharFrame (FONT_DESC *fontPtr, UniChar ch)
+{
+	TFB_Char *result = getOwnCharFrame (fontPtr, ch);
+
+	if (result == NULL && fontPtr->Fallback != NULL)
+		result = getOwnCharFrame (fontPtr->Fallback, ch);
+
+	return result;
 }
 

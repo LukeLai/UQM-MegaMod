@@ -342,7 +342,9 @@ FixContextFontEffect (void)
 			&& !(_get_context_fbk_flags () & FBK_DIRTY)))
 		return;
 
-	if (!GetContextFontDispHeight (&h) || !GetContextFontDispWidth (&w))
+	// Big enough for fallback (CJK) characters too, which are often
+	// wider than any character of the font itself.
+	if (!GetContextFontMaxCharSize (&w, &h))
 		return;
 
 	img = _pCurContext->FontBacking;

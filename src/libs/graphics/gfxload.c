@@ -356,6 +356,133 @@ compareBCDIndex (const void *arg1, const void *arg2)
 	return (int) bcd1->index - (int) bcd2->index;
 }
 
+// A font directory may contain a file 'fallback.fnt', holding the
+// content path of another font (e.g. "base/fonts/cjk-12.fon"),
+// optionally followed by a VertAlign value for it:
+//     addons/mm-hd/fonts/cjk-36.fon 9
+// Characters missing from the font are then taken from that fallback
+// font. This lets every font share one set of CJK glyphs; the VertAlign
+// value lines the fallback glyphs up with the font's own baseline, so
+// fonts of the same size but different baselines can share them too.
+// Fallback fonts are loaded once per path and VertAlign and shared
+// between all fonts that refer to them; they have no fallbacks of their
+// own.
+#define NO_VERT_ALIGN 1000
+		// fallback.fnt gave no VertAlign; use the fallback font's own
+
+typedef struct FallbackFont
+{
+	struct FallbackFont *next;
+	char *path;
+	int vertAlign;
+	FONT font;
+	int refCount;
+} FallbackFont;
+
+static FallbackFont *fallbackFonts = NULL;
+static BOOLEAN loadingFallback = FALSE;
+static int fallbackVertAlign = NO_VERT_ALIGN;
+		// VertAlign for the fallback font being loaded
+
+static FONT
+acquireFallbackFont (const char *path, int vertAlign)
+{
+	FallbackFont *entry;
+	const char *savedResName;
+	FONT font;
+
+	for (entry = fallbackFonts; entry != NULL; entry = entry->next)
+	{
+		if (strcmp (entry->path, path) == 0
+				&& entry->vertAlign == vertAlign)
+		{
+			entry->refCount++;
+			return entry->font;
+		}
+	}
+
+	// LoadResourceFromPath() clears _cur_resfile_name when done
+	savedResName = _cur_resfile_name;
+	loadingFallback = TRUE;
+	fallbackVertAlign = vertAlign;
+	font = LoadResourceFromPath (path, _GetFontData);
+	loadingFallback = FALSE;
+	fallbackVertAlign = NO_VERT_ALIGN;
+	_cur_resfile_name = savedResName;
+
+	if (font == NULL)
+	{
+		log_add (log_Warning, "Warning: Can't load fallback font '%s' "
+				"for font '%s'.", path, _cur_resfile_name);
+		return NULL;
+	}
+
+	entry = HMalloc (sizeof *entry);
+	entry->path = HMalloc (strlen (path) + 1);
+	strcpy (entry->path, path);
+	entry->vertAlign = vertAlign;
+	entry->font = font;
+	entry->refCount = 1;
+	entry->next = fallbackFonts;
+	fallbackFonts = entry;
+
+	return font;
+}
+
+static void
+releaseFallbackFont (FONT font)
+{
+	FallbackFont **link;
+
+	for (link = &fallbackFonts; *link != NULL; link = &(*link)->next)
+	{
+		FallbackFont *entry = *link;
+
+		if (entry->font != font)
+			continue;
+
+		if (--entry->refCount == 0)
+		{
+			*link = entry->next;
+			_ReleaseFontData (entry->font);
+			HFree (entry->path);
+			HFree (entry);
+		}
+		return;
+	}
+}
+
+// Reads the fallback font path and VertAlign from 'fallback.fnt'.
+// 'path' is made empty if there is no such file.
+static void
+readFallbackFontPath (uio_DirHandle *fontDirHandle, const char *fileName,
+		char *path, int *vertAlign)
+{
+	uio_Stream *file;
+	char line[PATH_MAX + 16];
+	char format[32];
+	int fields;
+
+	path[0] = '\0';
+	*vertAlign = NO_VERT_ALIGN;
+
+	file = uio_fopen (fontDirHandle, fileName, "r");
+	if (file == NULL)
+		return;
+
+	if (uio_fgets (line, sizeof line, file) != NULL)
+	{
+		// 'path' holds PATH_MAX characters including the terminator
+		snprintf (format, sizeof format, "%%%ds %%d", PATH_MAX - 1);
+		fields = sscanf (line, format, path, vertAlign);
+		if (fields < 1)
+			path[0] = '\0';
+		if (fields < 2)
+			*vertAlign = NO_VERT_ALIGN;
+	}
+	uio_fclose (file);
+}
+
 void *
 _GetFontData (uio_Stream *fp, DWORD length)
 {
@@ -369,6 +496,9 @@ _GetFontData (uio_Stream *fp, DWORD length)
 	FONT fontPtr = NULL;
 	uio_Stream *cfgFile = 0;
 	const char *cfg_name = "kerndat.fnt";
+	const char *fallback_name = "fallback.fnt";
+	char fallbackPath[PATH_MAX];
+	int fallbackVertAlignValue = NO_VERT_ALIGN;
 
 	if (_cur_resfile_name == 0)
 		goto err;
@@ -431,7 +561,8 @@ _GetFontData (uio_Stream *fp, DWORD length)
 		char_name = GetDirEntryAddress (SetAbsDirEntryTableIndex (
 				fontDir, dirEntryI));
 
-		if (strcmp (char_name, cfg_name) == 0)
+		if (strcmp (char_name, cfg_name) == 0
+				|| strcmp (char_name, fallback_name) == 0)
 			continue;
 
 		if (sscanf (char_name, "%x.", &charIndex) != 1)
@@ -524,6 +655,19 @@ _GetFontData (uio_Stream *fp, DWORD length)
 		uio_fclose (cfgFile);
 	}
 
+	if (loadingFallback)
+	{
+		fallbackPath[0] = '\0';
+		if (fallbackVertAlign != NO_VERT_ALIGN)
+		{	// Line the glyphs up with the font that uses this fallback
+			fontPtr->VertAlign = (SBYTE) fallbackVertAlign;
+			fontPtr->HaveFntData = TRUE;
+		}
+	}
+	else
+		readFallbackFontPath (fontDirHandle, fallback_name, fallbackPath,
+				&fallbackVertAlignValue);
+
 	uio_closeDir (fontDirHandle);
 	DestroyDirEntryTable (ReleaseDirEntryTable (fontDir));
 	if (fontMount != 0)
@@ -603,6 +747,12 @@ _GetFontData (uio_Stream *fp, DWORD length)
 
 	HFree (bcds);
 
+	// Load the fallback font last; this loads another resource and
+	// _cur_resfile_name (and any zip mount) is no longer needed here.
+	if (fallbackPath[0] != '\0')
+		fontPtr->Fallback = acquireFallbackFont (fallbackPath,
+				fallbackVertAlignValue);
+
 	(void) fp;  /* Satisfying compiler (unused parameter) */
 	(void) length;  /* Satisfying compiler (unused parameter) */
 	return fontPtr;
@@ -637,6 +787,9 @@ _ReleaseFontData (void *handle)
 	FONT font = (FONT) handle;
 	if (font == NULL)
 		return FALSE;
+
+	if (font->Fallback != NULL)
+		releaseFallbackFont (font->Fallback);
 
 	{
 		FONT_PAGE *page;

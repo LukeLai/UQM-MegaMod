@@ -60,6 +60,8 @@ struct font_desc
 	BYTE KernTab[MAX_UNICODE];
 	SBYTE VertAlign;
 	BOOLEAN HaveFntData;
+	struct font_desc *Fallback;
+			// Font to take missing characters from (see fallback.fnt)
 };
 
 #define CHAR_DESCPTR PCHAR_DESC
