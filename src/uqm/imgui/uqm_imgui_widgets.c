@@ -564,8 +564,8 @@ InitializeFontConfig (ImFontConfig *font_cfg, const char *name, float size)
 	return font_cfg;
 }
 
-void
-AddFontFromResource (const char *res, float size)
+static void
+addFontFromResource (const char *res, float size, bool merge)
 {
 	void *font_data;
 	ImFontConfig font_cfg;
@@ -582,6 +582,7 @@ AddFontFromResource (const char *res, float size)
 		memcpy (font_data, binfont->data, binfont->size);
 
 		InitializeFontConfig (&font_cfg, res, size);
+		font_cfg.MergeMode = merge;
 
 		ImFontAtlas_AddFontFromMemoryTTF (io->Fonts, font_data,
 				binfont->size, 0, &font_cfg, NULL);
@@ -590,6 +591,21 @@ AddFontFromResource (const char *res, float size)
 	}
 	else
 		log_add (log_Error, "Failed to load font: %s", res);
+}
+
+void
+AddFontFromResource (const char *res, float size)
+{
+	addFontFromResource (res, size, false);
+}
+
+// Adds the glyphs of a font to the font added last, for characters
+// that font lacks. Does nothing if the resource does not exist.
+void
+MergeFontFromResource (const char *res, float size)
+{
+	if (res_HasKey (res))
+		addFontFromResource (res, size, true);
 }
 
 float

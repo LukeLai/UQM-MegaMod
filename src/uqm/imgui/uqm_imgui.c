@@ -90,11 +90,16 @@ UQM_ImGui_Init (void)
 	// Set the theme
 	UQM_ImGui_Style ();
 
-	// Load resources
+	// Load resources. A translation may provide "cjkfont.ttf" for the
+	// characters the text fonts lack; it is merged into each of them.
 	AddFontFromResource ("playerfont.ttf", 18.0f);
+	MergeFontFromResource ("cjkfont.ttf",  18.0f);
 	AddFontFromResource ("tinyfont.ttf",   18.0f);
+	MergeFontFromResource ("cjkfont.ttf",  18.0f);
 	AddFontFromResource ("urquanfont.ttf", 20.0f);
+	MergeFontFromResource ("cjkfont.ttf",  20.0f);
 	ImFontAtlas_AddFontDefault (io->Fonts, NULL);
+	MergeFontFromResource ("cjkfont.ttf",  13.0f);
 	AddFontFromResource ("icons.ttf", 18.0f);
 	LoadResourceIndex (configDir, "imgui.cfg", "imgui.");
 	ImGuiStrings = CaptureStringTable (LoadStringTable ("text.imgui"));
