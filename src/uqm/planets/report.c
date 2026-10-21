@@ -82,6 +82,14 @@ ClearReportArea (COORD startx)
 	UnbatchGraphics ();
 }
 
+// The number of report cells a character takes: CJK characters are
+// about twice as wide as the Latin ones the cell grid was made for.
+static inline COUNT
+cellWidth (UniChar c)
+{
+	return UniChar_isCJK (c) ? 2 : 1;
+}
+
 static void
 MakeReport (SOUND ReadOutSounds, UNICODE *pStr, COUNT StrLen)
 {
@@ -145,11 +153,13 @@ MakeReport (SOUND ReadOutSounds, UNICODE *pStr, COUNT StrLen)
 
 			for (length = StrLen; length > 0; length--)
 			{
-				if (getCharFromString (&pCurrStr) == '\n')
+				UniChar c = getCharFromString (&pCurrStr);
+
+				if (c == '\n')
 					total_lines++;
 
 				if (total_lines == 0)
-					first_line_length++;
+					first_line_length += cellWidth (c);
 			}
 		}
 	}
@@ -198,20 +208,40 @@ MakeReport (SOUND ReadOutSounds, UNICODE *pStr, COUNT StrLen)
 		do
 		{
 			COUNT word_chars;
+			COUNT word_cells;
 			const UNICODE *pStr;
 			UniChar c;
- 
+			UniChar prev_c;
+			BOOLEAN separated;
+
+			// Scan one word. CJK text has no spaces, so a word also ends
+			// where a line may be broken between two characters.
 			pStr = t.pStr;
 			pNextStr = t.pStr;
-			while (UniChar_isGraph (getCharFromString (&pNextStr)))
+			word_cells = 0;
+			prev_c = 0;
+			for (;;)
+			{
+				c = getCharFromString (&pNextStr);
+				if (!UniChar_isGraph (c) || (pStr != t.pStr
+						&& UniChar_canBreakBetween (prev_c, c)))
+					break;
 				pStr = pNextStr;
+				word_cells += cellWidth (c);
+				prev_c = c;
+			}
+
+			// Whether the word is followed by a separator (space or line
+			// end), rather than directly by the next CJK word.
+			pNextStr = pStr;
+			separated = !UniChar_isGraph (getCharFromString (&pNextStr));
 
 			word_chars = (COUNT)utf8StringCountN (t.pStr, pStr);
-			if ((col_cells += word_chars) <= NUM_CELL_COLS)
+			if ((col_cells += word_cells) <= NUM_CELL_COLS)
 			{
 				TimeCount TimeOut;
 
-				if (StrLen -= word_chars)
+				if ((StrLen -= word_chars) && separated)
 					--StrLen;
 				TimeOut = GetTimeCounter ();
 				while (word_chars--)
@@ -237,19 +267,24 @@ MakeReport (SOUND ReadOutSounds, UNICODE *pStr, COUNT StrLen)
 						switch (c)
 						{
 							case ',':
+							case 0x3001: // ideographic comma
+							case 0xFF0C: // fullwidth comma
 								TimeOut += ONE_SECOND / (4 << scale);
 								break;
 							case '.':
+							case 0x3002: // ideographic full stop
 								TimeOut += ONE_SECOND / (2 << scale);
 								break;
 							case '!':
-								if (last_c != '!' && last_c != ' ')
+							case 0xFF01: // fullwidth exclamation mark
+								if (last_c != c && last_c != ' ')
 									TimeOut += ONE_SECOND / (2 << scale);
 								else
 									TimeOut += ONE_SECOND / (20 << scale);
 								break;
 							case '?':
-								if (last_c != '?' && last_c != ' ')
+							case 0xFF1F: // fullwidth question mark
+								if (last_c != c && last_c != ' ')
 									TimeOut += ONE_SECOND / (2 << scale);
 								else
 									TimeOut += ONE_SECOND / (20 << scale);
@@ -272,17 +307,21 @@ MakeReport (SOUND ReadOutSounds, UNICODE *pStr, COUNT StrLen)
 						}
 					}
 					t.pStr = pNextStr;
-					t.baseline.x += r.extent.width + RES_SCALE (1);
+					t.baseline.x += cellWidth (c)
+							* (r.extent.width + RES_SCALE (1));
 							// Text spacing
 				}
 
-				++col_cells;
-				last_c = getCharFromString (&t.pStr);
-				t.baseline.x += r.extent.width + RES_SCALE (1);
-						// Space spacing
+				if (separated)
+				{
+					++col_cells;
+					last_c = getCharFromString (&t.pStr);
+					t.baseline.x += r.extent.width + RES_SCALE (1);
+							// Space spacing
 
-				if (curr_line >= 0 && last_c == '\n')
-					curr_line++;
+					if (curr_line >= 0 && last_c == '\n')
+						curr_line++;
+				}
 			}
 		} while (col_cells <= NUM_CELL_COLS && last_c != '\n' && StrLen);
 
